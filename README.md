@@ -13,106 +13,195 @@
 </p>
 
 ---
+## Features
 
-## ✨ О проекте
-
-`rebackup` — это быстрый и безопасный CLI-инструмент для резервного копирования и восстановления данных через `.tar.gz`.
-
-Создан с упором на:
-- ⚡ производительность
-- 🔒 безопасность
-- 🧱 минимальные зависимости (один бинарник)
+| Feature | Details |
+|---------|---------|
+| **Backup** | Timestamped `.tar.gz` archives with ASCII progress bar |
+| **Restore** | Safe extraction with path-traversal protection |
+| **List** | Inspect archive contents without extracting |
+| **Security** | Every path validated before write (Zip Slip / tar slip prevention) |
+| **Logging** | Structured INFO / ERROR / DEBUG levels with timestamps |
+| **Telegram** | Optional upload to Telegram chat via Bot API (≤ 50 MiB) |
+| **Large dirs** | Streaming I/O — memory usage stays constant regardless of archive size |
+| **Single binary** | No runtime dependencies; one `go build` produces a static binary |
 
 ---
 
-## 🚀 Quick Start
+## Project structure
+
+```
+rebackup/
+├── cmd/
+│   ├── root.go       # Cobra root command & version
+│   ├── backup.go     # `backup` subcommand flags + wiring
+│   └── restore.go    # `restore` subcommand flags + wiring
+├── internal/
+│   ├── backup/
+│   │   └── backup.go   # Archive creation, progress tracking, Telegram upload
+│   ├── restore/
+│   │   └── restore.go  # Safe extraction, archive listing
+│   └── security/
+│       └── security.go # SafePath(), ValidateArchivePath()
+├── pkg/
+│   └── logger/
+│       └── logger.go   # Levelled logger + ASCII progress bar
+├── main.go
+├── go.mod
+├── Makefile
+└── README.md
+```
+
+---
+
+## Requirements
+
+- Go **1.22+**
+- Linux (Ubuntu 20.04 / Debian 11 or newer recommended)
+
+---
+
+## Installation
+
+### Option A — build from source
 
 ```bash
-# Установка
-go install github.com/re-CRYSTAL/reBackup@latest
-
-# Бэкап
-rebackup backup --path /home/user/data
-
-# Восстановление
-rebackup restore --file backup.tar.gz --target /restore/path
-🔥 Возможности
-📦 Backup в .tar.gz с прогрессбаром
-♻️ Безопасный restore (защита от path traversal)
-📂 Просмотр архива без распаковки
-📡 Отправка в Telegram
-📊 Структурированные логи
-🧠 Потоковая обработка (без роста RAM)
-🧩 Один статический бинарник
-🧱 Архитектура
-rebackup/
-├── cmd/           # CLI команды (Cobra)
-├── internal/
-│   ├── backup/   # Логика создания архива
-│   ├── restore/  # Восстановление
-│   └── security/ # Безопасность путей
-├── pkg/logger/   # Логирование + прогрессбар
-└── main.go
-⚙️ Установка
-Сборка
 git clone https://github.com/re-CRYSTAL/reBackup.git
 cd rebackup
 
-make build
-sudo make install
-🧪 Использование
-Backup
+make build                     # produces ./rebackup
+sudo make install              # copies to /usr/local/bin/rebackup
+```
+
+### Option B — go install (once pushed to GitHub)
+
+```bash
+go install github.com/re-CRYSTAL/reBackup@latest
+```
+
+The binary lands in `$(go env GOPATH)/bin`; make sure that is on your `$PATH`.
+
+---
+
+## Usage
+
+### `backup`
+
+```
 rebackup backup [flags]
 
--p, --path       Путь к данным (обязательно)
--o, --output     Куда сохранить архив
-    --telegram   Отправить в Telegram
-Примеры
-rebackup backup --path /data
+Flags:
+  -p, --path string     Source directory to backup  (required)
+  -o, --output string   Output directory for the archive  (default ".")
+      --telegram        Send archive to Telegram after creation
+  -h, --help            Show help
+```
 
-rebackup backup --path /data --output /backups
+**Examples**
 
-rebackup backup --path /data --telegram
-Restore
+```bash
+# Basic backup — archive saved in the current directory
+rebackup backup --path /home/user/data
+
+# Backup to a specific location
+rebackup backup --path /home/user/data --output /mnt/backups
+
+# Backup and push to Telegram
+export TELEGRAM_TOKEN="123456:ABC-your-bot-token"
+export TELEGRAM_CHAT_ID="987654321"
+rebackup backup --path /home/user/data --telegram
+```
+
+Sample output:
+
+```
+[INFO]  2024/01/15 10:30:01 Backup start  source="/home/user/data"  output="."
+[INFO]  2024/01/15 10:30:01 Pre-scan: 142 entries | 45.23 MiB uncompressed
+[INFO]  2024/01/15 10:30:01 Creating archive: backup_2024-01-15_10-30.tar.gz
+Backup     [████████████████████████████████████████] 100.0% (142/142)
+[INFO]  2024/01/15 10:30:03 Backup done   archive=backup_2024-01-15_10-30.tar.gz  compressed=12.31 MiB  original=45.23 MiB
+
+✅ Backup created: backup_2024-01-15_10-30.tar.gz
+```
+
+---
+
+### `restore`
+
+```
 rebackup restore [flags]
 
--f, --file       Архив (обязательно)
--t, --target     Куда восстановить
--l, --list       Только просмотр
-Примеры
-rebackup restore --file backup.tar.gz --target /restore
+Flags:
+  -f, --file string     Path to backup archive  (required)
+  -t, --target string   Destination directory for extracted files
+  -l, --list            List archive contents without extracting
+  -h, --help            Show help
+```
 
-rebackup restore --file backup.tar.gz --list
-🔐 Безопасность
-✅ Защита от ../../ (Zip Slip)
-✅ Проверка всех путей перед записью
-✅ Ограничение чтения (10 GiB)
-✅ Ошибки архивов не игнорируются
-🌐 Telegram интеграция
-export TELEGRAM_TOKEN="your_token"
-export TELEGRAM_CHAT_ID="your_chat_id"
+**Examples**
 
-rebackup backup --path /data --telegram
-📦 Сборка (production)
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-go build -ldflags="-s -w" -o rebackup .
-📊 Пример вывода
-[INFO] Backup start source="/data"
-[INFO] Creating archive: backup_2024-01-15.tar.gz
+```bash
+# Restore to a directory
+rebackup restore --file backup_2024-01-15_10-30.tar.gz --target /home/user/restored
 
-Backup [████████████████████████████████] 100%
+# List archive contents without extracting
+rebackup restore --file backup_2024-01-15_10-30.tar.gz --list
+```
 
-✅ Backup created
-🧭 Roadmap
- Инкрементальные бэкапы
- Шифрование архивов
- S3 / MinIO поддержка
- Конфиг-файл (YAML)
- TUI интерфейс
-🤝 Contributing
+Sample `--list` output:
 
-Pull requests приветствуются. Для крупных изменений сначала открой issue.
+```
+TYPE        SIZE       MODIFIED              NAME
+──────────────────────────────────────────────────────────────────────
+dir         0B         2024-01-15 09:15:00   data/
+file        4.0KiB     2024-01-15 09:10:00   data/config.yaml
+file        1.2MiB     2024-01-14 22:00:00   data/database.db
+symlink     0B         2024-01-15 09:00:00   data/latest -> database.db
+──────────────────────────────────────────────────────────────────────
+Total: 4 entries  |  1.2MiB
+```
 
-📄 License
+---
 
-GPL-3.0
+## Environment variables
+
+| Variable | Required for | Description |
+|----------|-------------|-------------|
+| `TELEGRAM_TOKEN` | `--telegram` | Bot token from [@BotFather](https://t.me/BotFather) |
+| `TELEGRAM_CHAT_ID` | `--telegram` | Numeric chat or channel ID |
+
+---
+
+## Security model
+
+`rebackup` implements **safeExtract** via `security.SafePath()`:
+
+1. The target directory is resolved to an absolute path.
+2. Every archive entry path is joined with the absolute target and cleaned (`filepath.Clean`).
+3. The result is checked to confirm it has the target as a prefix.
+4. Entries that escape the target (e.g. `../../etc/passwd`, `/etc/shadow`,
+   `../targetDirSuffix/evil`) are **logged and skipped** — extraction continues.
+
+Additionally:
+
+- Each extracted file is wrapped in `io.LimitReader(10 GiB)` to prevent decompression-bomb attacks.
+- Corrupted gzip/tar headers are surfaced as hard errors, not silently ignored.
+
+---
+
+## Building for distribution
+
+```bash
+# Statically linked binary (fully portable, no libc dependency)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o rebackup .
+
+# Verify it is static
+file rebackup
+# rebackup: ELF 64-bit LSB executable, x86-64, statically linked, stripped
+```
+
+---
+
+## License
+
+GPL-3.0 license
