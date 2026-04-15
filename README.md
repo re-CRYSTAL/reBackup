@@ -1,4 +1,4 @@
-# rebackup
+## reBackup
 
 <p align="center">
   <b>Fast. Safe. Minimal.</b><br>
